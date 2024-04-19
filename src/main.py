@@ -27,24 +27,31 @@ def read_large_file_in_chunks():
         # For example, you can filter rows, drop columns, etc.
         # append the rows to the empty DataFrame
 
-        # Convert the 'evals' column to JSON
-        json_evals = chunk['evals'].apply(lambda x: x[0])
+        processed_chunk = pd.DataFrame()
 
-        # Convert the JSON to a DataFrame
-        evals_df = pd.json_normalize(json_evals)
+        for index, row in chunk.iterrows():
+            
+            # Flatten the 'evals' list into a DataFrame
+            evals_df = pd.json_normalize(row['evals'])
 
-        # convert 'pvs' to a DataFrame
-        # pvs is a list of dictionaries with attributes: cp, line (UCI format), mate (optional)
-        pvs_df = pd.json_normalize(evals_df['pvs'].apply(lambda x: x[0]))
+            # Flatten the 'pvs' list into a DataFrame
+            pvs_df = pd.json_normalize(evals_df['pvs'].iloc[0])
 
-        # concatenate the evals_df with the original chunk
+            for pv in evals_df['pvs'].iloc[1:]:
+                pv_df = pd.json_normalize(pv)
+                pvs_df = pd.concat([pvs_df, pv_df], ignore_index=True)
+
+                df = pd.concat([evals_df, pv_df], axis=1)
+
+                df['fen'] = row['fen']
+
+                processed_chunk = pd.concat([processed_chunk, df], ignore_index=True)
+
+        # Drop the 'pvs' column
+        processed_chunk = processed_chunk.drop(columns=['pvs'])
         
-        chunk = pd.concat([chunk, evals_df, pvs_df], axis=1)
+        df_chunk = pd.concat([df_chunk, processed_chunk], axis=0)
 
-        # drop the 'evals' and 'pvs' columns
-        chunk = chunk.drop(columns=['evals', 'pvs'])
-
-        df_chunk = pd.concat([df_chunk, chunk], axis=0)
 
         if chunk_count >= max_chunks:
             break
