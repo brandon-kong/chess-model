@@ -1,6 +1,8 @@
 import pandas as pd
 import numpy as np
 
+from util.compress import zst_to_csv
+
 # max_chunks * chunksize = 50000 (total number of rows in the file)
 chunksize = 1000
 max_chunks = 10
@@ -27,31 +29,26 @@ def read_large_file_in_chunks():
         # For example, you can filter rows, drop columns, etc.
         # append the rows to the empty DataFrame
 
-        processed_chunk = pd.DataFrame()
+        processed_rows = []
 
         for index, row in chunk.iterrows():
-            
-            # Flatten the 'evals' list into a DataFrame
-            evals_df = pd.json_normalize(row['evals'])
+            evals = pd.DataFrame(row['evals'])
+            for eval_index, eval_row in evals.iterrows():
+                pvs = pd.DataFrame(eval_row['pvs'])
+                for pv_index, pv_row in pvs.iterrows():
+                    processed_row = {
+                        'line': pv_row.get('line'),
+                        'mate': pv_row.get('mate'),
+                        'cp': pv_row.get('cp'),
+                        'depth': eval_row.get('depth'),
+                        'knodes': eval_row.get('knodes'),
+                        'fen': row.get('fen')
+                    }
+                    processed_rows.append(processed_row)
 
-            # Flatten the 'pvs' list into a DataFrame
-            pvs_df = pd.json_normalize(evals_df['pvs'].iloc[0])
-
-            for pv in evals_df['pvs'].iloc[1:]:
-                pv_df = pd.json_normalize(pv)
-                pvs_df = pd.concat([pvs_df, pv_df], ignore_index=True)
-
-                df = pd.concat([evals_df, pv_df], axis=1)
-
-                df['fen'] = row['fen']
-
-                processed_chunk = pd.concat([processed_chunk, df], ignore_index=True)
-
-        # Drop the 'pvs' column
-        processed_chunk = processed_chunk.drop(columns=['pvs'])
+        processed_chunk = pd.DataFrame(processed_rows)
         
         df_chunk = pd.concat([df_chunk, processed_chunk], axis=0)
-
 
         if chunk_count >= max_chunks:
             break
